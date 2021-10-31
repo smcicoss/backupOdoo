@@ -1,0 +1,59 @@
+#! /bin/bash
+# -*- ENCODING: UTF-8 -*-
+# ·
+
+#   script: backupOdoo
+#   Autor:  Simón Martínez <simon@cicoss.net>
+#   fecha:  domingo, 31 de octubre de 2021
+#
+#   realiza una copia de seguridad remota de una BD de Odoo
+#       a través de la propia web de Odoo
+
+declare -r fileconf="/etc/smbackup/backup-odoo.json"
+
+if [[ ! -f ${fileconf} ]]; then
+    echo -e "\n\tNo se ha encontrado el fichero de configuración\n\n"
+    exit 1
+fi
+
+if [ $# -eq 0 ]; then
+    echo "Debe especificar un nombre de copia. Ej.:"
+    echo -e "\t backupOdoo 'Nombre'"
+    exit 2
+else
+    copyname="$1"
+fi
+
+server_name=$(jq -r ".\"server_name\"" ${fileconf})
+
+if [[ $server_name != "$(hostname)" ]]; then
+    echo "El fichero de configuración se ha realizado"
+    echo -e "\tpara ser ejecutado en ${server_name} y"
+    echo -e "\tahora se está ejecutando en $(hostname)"
+    exit 3
+elif [[ "$(jq -r ".\"backups\".\"${copyname}\"" ${fileconf})" == 'null' ]]; then
+    echo -e "No hay ninguna copia configurada con el nombre '${copyname}'\n"
+    exit 4
+else
+    echo -e "\n\nCopia de seguridad '${copyname}' desde ${server_name}\n"
+fi
+
+DBname="$(jq -r ".\"backups\".\"${copyname}\".\"DB_name\"" ${fileconf})"
+
+fecha=$(date -Iseconds)
+
+storepath="$(jq -r ".\"backups\".\"${copyname}\".\"store_path\"" ${fileconf})"
+filename="${DBname}-${fecha}.zip"
+fullfilename="$storepath$filename"
+
+passwd="$(jq -r ".\"backups\".\"${copyname}\".\"master_passwd\"" ${fileconf})"
+
+format="$(jq -r ".\"backups\".\"${copyname}\".\"format\"" ${fileconf})"
+
+URL="$(jq -r ".\"backups\".\"${copyname}\".\"URL\"" ${fileconf})"
+
+echo -e "Realizando copia de la base de datos ${DBname} en "
+echo -e "\t${storepath}\n\tdesde ${URL}"
+echo -e "\tcon formato ${format}"
+
+curl -X POST -F "master_pwd=${passwd}" -F "name=\"${DBname}\"" -F "backup_format=${format}" -o "${fullfilename}" "${URL}"
