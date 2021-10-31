@@ -9,13 +9,16 @@
 #   realiza una copia de seguridad remota de una BD de Odoo
 #       a través de la propia web de Odoo
 
+# establece la localización del fichero de configuración
 declare -r fileconf="/etc/smbackup/backup-odoo.json"
 
+# compruebo la existencia del fichero de configuración
 if [[ ! -f ${fileconf} ]]; then
     echo -e "\n\tNo se ha encontrado el fichero de configuración\n\n"
     exit 1
 fi
 
+# se requiere el nombre de la copia como parámetro
 if [ $# -eq 0 ]; then
     echo "Debe especificar un nombre de copia. Ej.:"
     echo -e "\t backupOdoo 'Nombre'"
@@ -24,36 +27,46 @@ else
     copyname="$1"
 fi
 
+# obtengo el nombre del equipo donde ha de ejecutarse el script
 server_name=$(jq -r ".\"server_name\"" ${fileconf})
 
+# compruebo la coincidencia
 if [[ $server_name != "$(hostname)" ]]; then
     echo "El fichero de configuración se ha realizado"
     echo -e "\tpara ser ejecutado en ${server_name} y"
     echo -e "\tahora se está ejecutando en $(hostname)"
     exit 3
 elif [[ "$(jq -r ".\"backups\".\"${copyname}\"" ${fileconf})" == 'null' ]]; then
+    # compruebo la existencia de configuración para el nombre de copia dado
     echo -e "No hay ninguna copia configurada con el nombre '${copyname}'\n"
     exit 4
 else
     echo -e "\n\nCopia de seguridad '${copyname}' desde ${server_name}\n"
 fi
 
+# obtengo el nombre de la base de datos Odoo
 DBname="$(jq -r ".\"backups\".\"${copyname}\".\"DB_name\"" ${fileconf})"
 
+# fecha y hora de la copia
 fecha=$(date -Iseconds)
 
+# compongo el nombre de la copia con su ruta
 storepath="$(jq -r ".\"backups\".\"${copyname}\".\"store_path\"" ${fileconf})"
 filename="${DBname}-${fecha}.zip"
 fullfilename="$storepath$filename"
 
+# obtengo la password
 passwd="$(jq -r ".\"backups\".\"${copyname}\".\"master_passwd\"" ${fileconf})"
 
+# obtengo el formato
 format="$(jq -r ".\"backups\".\"${copyname}\".\"format\"" ${fileconf})"
 
+# obtengo la URL del acceso al proceso de backup de Odoo
 URL="$(jq -r ".\"backups\".\"${copyname}\".\"URL\"" ${fileconf})"
 
 echo -e "Realizando copia de la base de datos ${DBname} en "
 echo -e "\t${storepath}\n\tdesde ${URL}"
 echo -e "\tcon formato ${format}"
 
+# ejecuto la copia
 curl -X POST -F "master_pwd=${passwd}" -F "name=\"${DBname}\"" -F "backup_format=${format}" -o "${fullfilename}" "${URL}"
